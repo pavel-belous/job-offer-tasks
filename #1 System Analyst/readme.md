@@ -41,3 +41,168 @@
  ## [OpenAPI специцикация](https://pavel-belous.github.io/swagger-github-pages)
 
 там же пример запроса и ответа согласно скриншоту.
+
+# задание 3
+
+## вариант №1 - Асинхронный Pub-Sub (Kafka/RabbitMQ) - Предпочтительный
+```mermaid
+graph TD
+    %% Стилизация компонентов
+    classDef microservice fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef broker fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+    classDef external fill:#f1f8e9,stroke:#558b2f,stroke-width:2px;
+    classDef client fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+    
+
+    %% Определение компонентов
+    OrderService[Микросервис Заказов<br/>Order Service]:::microservice
+    CartService[Микросервис Корзины<br/>Cart Service]:::microservice
+    PromoService[Маркетинговый Сервис<br/>Promo Service]:::microservice
+    
+    Kafka[(Брокер сообщений<br/>Apache Kafka)]:::broker
+    
+    NotificationService[Микросервис уведомлений<br/>Notification Service]:::microservice
+    UserService[Сервис Пользователей<br/>User Service]:::microservice
+    
+    FCM[Шлюз FCM<br/>Firebase Cloud Messaging]:::external
+    APNs[Шлюз APNs<br/>Apple Push Notification]:::external
+    
+    Android[Смартфон<br/>Android Клиент]:::client
+    iOS[Смартфон<br/>iOS Клиент]:::client
+
+    %% Потоки данных и связи
+    OrderService -->|1. Публикация события<br/>order.status.cancelled| Kafka
+    CartService -->|1. Публикация события<br/>cart.abandoned| Kafka
+    PromoService -->|1. Публикация события<br/>promo.broadcast| Kafka
+    
+    Kafka -->|2. Асинхронное чтение<br/>из топика| NotificationService
+    
+    NotificationService <-->|3. Запрос push_token<br/>и настроек lang| UserService
+    
+    NotificationService -->|4. Отправка payload| FCM
+    NotificationService -->|4. Отправка payload| APNs
+    
+    FCM -->|5. Доставка PUSH| Android
+    APNs -->|5. Доставка PUSH| iOS
+```
+
+## вариант №2 - Синхронный REST API (HTTP/gRPC)
+
+```mermaid
+graph TD
+    classDef microservice fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef external fill:#f1f8e9,stroke:#558b2f,stroke-width:2px;
+    classDef client fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+
+    OrderService[Микросервис Заказов<br/>Order Service]:::microservice
+    NotificationService[Микросервис уведомлений<br/>Notification Service]:::microservice
+    UserService[Сервис Пользователей<br/>User Service]:::microservice
+    
+    FCM[Шлюз FCM<br/>Google]:::external
+    APNs[Шлюз APNs<br/>Apple]:::external
+    
+    Android[Смартфон Android]:::client
+    iOS[Смартфон iOS]:::client
+
+    %% Потоки данных
+    OrderService -->|1. Синхронный HTTP POST запрос<br/>order_id, user_id| NotificationService
+    NotificationService <-->|2. Синхронный запрос push_token<br/>и настроек lang| UserService
+    NotificationService -->|3. Отправка payload| FCM
+    NotificationService -->|3. Отправка payload| APNs
+    FCM -->|4. Доставка PUSH| Android
+    APNs -->|4. Доставка PUSH| iOS
+```
+
+## Вариант №3 - через базу данных (Transactional Outbox)
+
+```mermaid
+graph TD
+    classDef microservice fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef db fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px;
+    classDef external fill:#f1f8e9,stroke:#558b2f,stroke-width:2px;
+    classDef client fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+
+    OrderService[Микросервис Заказов<br/>Order Service]:::microservice
+    
+    subgraph PostgreSQL [Основная БД заказов]
+        OrdersTable[(Таблица Orders)]:::db
+        OutboxTable[(Таблица Outbox_Messages)]:::db
+    end
+
+    Poller[Фоновый опрашиватель<br/>Outbox Poller Service]:::microservice
+    NotificationService[Микросервис уведомлений<br/>Notification Service]:::microservice
+    UserService[Сервис Пользователей<br/>User Service]:::microservice
+    
+    FCM[Шлюз FCM]:::external
+    APNs[Шлюз APNs]:::external
+    
+    Android[Смартфон Android]:::client
+    iOS[Смартфон iOS]:::client
+
+    %% Потоки данных
+    OrderService -->|1. Изменяет статус| OrdersTable
+    OrderService -->|1. Записывает задачу в рамках той же транзакции| OutboxTable
+    
+    Poller -->|2. Сканирует новые записи раз в секунду| OutboxTable
+    Poller -->|3. Передает события на отправку| NotificationService
+    
+    NotificationService <-->|4. Запрос push_token| UserService
+    NotificationService -->|5. Отправка payload| FCM
+    NotificationService -->|5. Отправка payload| APNs
+    FCM -->|6. Доставка PUSH| Android
+    APNs -->|6. Доставка PUSH| iOS
+```
+
+## Вариант №4 - Готовая SaaS-платформа (Mindbox и др.)
+
+```mermaid
+graph TD
+    classDef microservice fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef saas fill:#fce4ec,stroke:#c2185b,stroke-width:2px;
+    classDef external fill:#f1f8e9,stroke:#558b2f,stroke-width:2px;
+    classDef client fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+
+    OrderService[Микросервис Заказов<br/>Order Service]:::microservice
+    CartService[Микросервис Корзины<br/>Cart Service]:::microservice
+    
+    Mindbox[Внешняя облачная платформа<br/>SaaS: Mindbox / Pushwoosh]:::saas
+    
+    FCM[Шлюз FCM]:::external
+    APNs[Шлюз APNs]:::external
+    
+    Android[Смартфон Android]:::client
+    iOS[Смартфон iOS]:::client
+
+    %% Потоки данных
+    App[Мобильное приложение при старте]:::client -->|1. Сама регистрирует push_token во внешней системе| Mindbox
+
+    OrderService -->|2. Отправляет только user_id и код события| Mindbox
+    CartService -->|2. Отправляет только user_id и код события| Mindbox
+    
+    Mindbox -->|3. Сама собирает текст по шаблону и шлет в шлюзы| FCM
+    Mindbox -->|3. Сама собирает текст по шаблону и шлет в шлюзы| APNs
+    
+    FCM -->|4. Доставка PUSH| Android
+    APNs -->|4. Доставка PUSH| iOS
+
+```
+
+## Сравнительный анализ архитектурных решений отправки PUSH-уведомлений
+
+| Критерий | Основной вариант: Асинхронный Pub-Sub (Kafka/RabbitMQ) | Синхронный REST API (HTTP/gRPC) | Transactional Outbox | Готовая SaaS-платформа (Mindbox и др.) |
+|---|---|---|---|---|
+| Связность компонентов | Минимальная (Сервисы полностью изолированы друг от друга через шину) | Высокая (Сервис заказов жестко зависит от сервиса пушей) | Низкая (Связующим звеном выступают таблицы в базе данных) | Низкая (Все сервисы зависят только от внешнего API платформы) |
+| Отказоустойчивость | Высокая (При падении сервиса пушей сообщения копятся в очереди шины) | Низкая (Если сервис пушей упал — уведомление потеряно навсегда) | Очень высокая (Данные заказа и пуша сохраняются в одной транзакции) | Высокая (Зависит от надежности серверов внешнего провайдера) |
+| Влияние на бизнес-логику | Отсутствует (Сервис заказов просто сбрасывает событие в шину и работает дальше) | Критическое (Медленный ответ от Google/Apple тормозит процесс покупки) | Минимальное (Запись в БД происходит мгновенно, отправка идет в фоне) | Минимальное (Бизнес-сервисы шлют легкий вебхук во внешнюю систему) |
+| Сложность внедрения и поддержки | Высокая (Требуется развертывание, администрирование и мониторинг кластера Kafka) | Минимальная (Пишется за несколько дней, не требует стороннего софта) | Средняя (Нужно проектировать таблицы и писать фоновые демоны-опрашиватели) | Низкая для бэкенда (Интеграция по API, но сложная настройка SDK в приложении) |
+| Масштабируемость под массовые рассылки | Отличная (Kafka спроектирована под обработку миллионов сообщений в секунду) | Плохая (При рассылке на 1 млн пользователей серверы бэкенда «лягут» от нагрузки) | Плохая (Миллионы операций SELECT и UPDATE за секунду заблокируют основную БД) | Идеальная (Инфраструктурную нагрузку полностью берет на себя провайдер) |
+| Удобство для маркетинга | Низкое (Шаблоны жестко привязаны к микросервису уведомлений) | Низкое (Любое изменение текста пуша требует работы программистов) | Низкое (Шаблоны хранятся в коде или локальной БД бэкенда) | Максимальное (Есть визуальный конструктор шаблонов и сегментации без кода) |
+| Финансовые затраты | Средние (Затраты на аренду серверов под кластер брокера сообщений) | Бесплатно (Используются только свои текущие мощности) | Бесплатно (Используется уже существующая база данных) | Очень дорого (Высокая ежемесячная подписка за каждого активного пользователя) |
+
+------------------------------
+## Итог:
+
+* Когда выбирать REST API - если перед нами стоит задача собрать работающий прототип (MVP) за неделю с нулевым бюджетом.
+* Когда выбирать Outbox - если интернет-магазин продает эксклюзивные B2B-товары, где объемы заказов маленькие, но критически важна 100% гарантия и строгий хронологический порядок доставки каждого системного сообщения.
+* Когда выбирать SaaS - если в компании сильный отдел маркетинга, которому нужно каждый день тестировать разные гипотезы, менять тексты акций, а у бэкенд-команды нет ресурсов писать свою админку.
+* Почему наш основной вариант (Kafka) - лучший для предложенного примера: это золотая середина для активно растущего e-commerce проекта. Схема обеспечивает полную изоляцию критических процессов покупки от технических сбоев push-провайдеров, легко переваривает миллионные нагрузки при распродажах и не перегружает основную базу данных интернет-магазина.
